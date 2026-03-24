@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="tt" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lexicon-Powered Tatar Arabic → Cyrillic Transcriber</title>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Cinzel:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* PRESERVING YOUR THEME */
+:root {
+  --navy: #1e2a6e; --navy-deep: #131b4a; --cream: #f5f0e4;
+  --cream-alt: #ede5cf; --teal: #2a7f8a; --rose: #c0454a;
+  --amber: #d4892a; --gold: #c9a227; --gold-lt: #e8c96a;
+  --ink: #1a1630; --dim: #6b6080; --border: rgba(30,42,110,0.22);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--cream);color:var(--ink);font-family:'EB Garamond',Georgia,serif;min-height:100vh;}
+header{background:var(--navy-deep);padding:30px 20px;text-align:center;}
+h1{font-family:'Noto Naskh Arabic',serif;font-weight:700;font-size:1.8rem;color:var(--gold-lt);direction:rtl;margin-bottom:5px;}
+.subtitle{font-family:'Cinzel',serif;font-size:.7rem;letter-spacing:.28em;color:rgba(245,240,228,.45);text-transform:uppercase;}
+main{max-width:1020px;margin:30px auto;padding:0 20px;}
+.input-tabs{display:flex;border-bottom:2px solid var(--border);}
+.tab-btn{font-family:'Cinzel',serif;font-size:.66rem;letter-spacing:.2em;padding:11px 20px;border:none;background:transparent;color:var(--dim);cursor:pointer;text-transform:uppercase;}
+.tab-btn.active{color:var(--navy);border-bottom:3px solid var(--navy);background:rgba(30,42,110,.05);}
+.panels{display:grid;grid-template-columns:1fr 1fr;border:1.5px solid var(--border);border-top:none;background:#fff;}
+@media(max-width:680px){.panels{grid-template-columns:1fr;}}
+.panel{display:flex;flex-direction:column;border-right:1px solid var(--border);}
+.panel-label{font-family:'Cinzel',serif;font-size:.63rem;letter-spacing:.22em;color:var(--dim);padding:10px;background:rgba(30,42,110,.04);border-bottom:1px solid var(--border);}
+textarea{flex:1;min-height:250px;padding:20px;font-family:'Noto Naskh Arabic',serif;font-size:1.4rem;direction:rtl;border:none;outline:none;}
+.output-box{flex:1;min-height:250px;padding:20px;font-size:1.2rem;line-height:1.6;white-space:pre-wrap;background:#fcfcfc;}
+.controls{padding:15px;background:rgba(30,42,110,.03);border-top:1px solid var(--border);display:flex;gap:10px;}
+.btn{font-family:'Cinzel',serif;font-size:.65rem;padding:10px 20px;border:none;cursor:pointer;text-transform:uppercase;transition:0.2s; background:var(--navy); color:white;}
+.image-drop-zone{height:220px;display:flex;flex-direction:column;align-items:center;justify-content:center;border:2px dashed var(--border);margin:10px;cursor:pointer;text-align:center;}
+#imagePreview{max-height:140px;display:none;margin-top:10px;}
+#status{font-size:0.8rem;color:var(--rose);margin-top:5px;}
+canvas { display: none; }
+</style>
+</head>
+<body>
+
+<header>
+    <h1>تاتارچا غەرەپ يازماسدىن حازەرگە كيرىللىتساغا كوچەرگېچ</h1>
+    <div class="subtitle">Tatar Arabic Cyrillic Transcriber</div>
+</header>
+
+<main>
+  <div class="input-tabs">
+    <button class="tab-btn active" id="btn-text" onclick="switchTab('text')">Direct Input</button>
+    <button class="tab-btn" id="btn-image" onclick="switchTab('image')">Image Cleanup & OCR</button>
+  </div>
+
+  <div class="panels">
+    <div class="panel">
+      <div class="panel-label">Arabic (İske İmlâ) Source</div>
+      
+      <div id="tab-text" class="tab-content">
+        <textarea id="inputText" placeholder="Paste Arabic Tatar text here..."></textarea>
+      </div>
+
+      <div id="tab-image" class="tab-content" style="display:none">
+        <div class="image-drop-zone" onclick="document.getElementById('fileInput').click()">
+          <div id="drop-prompt">
+             <p><strong>Click to Upload Image</strong></p>
+          </div>
+          <input type="file" id="fileInput" hidden accept="image/*" onchange="processOCR(event)">
+          <img id="imagePreview">
+          <div id="status">Ready</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="btn" onclick="runTranscribe()">Transcribe Now →</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-label">Tatar Cyrillic Output</div>
+      <div id="outputBox" class="output-box"></div>
+    </div>
+  </div>
+</main>
+
+<canvas id="procCanvas"></canvas>
+
+<script>
+/* ==========================================================
+   1. THE TATAR DICTIONARY (CRITICAL FOR HIGH ACCURACY)
+   Add your most common words here. 
+   Format: "Arabic": "Cyrillic"
+   ========================================================== */
+const TATAR_DICTIONARY = {
+    // Conjunctions & Particles
+    "هم": "һәм",
+    "ده": "дә",
+    "دا": "да",
+    "بر": "бер",
+    "بلن": "белән",
+    "اچون": "өчен",
+    "يوق": "юк",
+    "بار": "бар",
+    
+    // Common Words
+    "بارلق": "барлык",
+    "كشيلر": "кешеләр",
+    "آزاد": "азат",
+    "اوز": "үз",
+    "آبرويلرى": "абруйлары",
+    "حقوقلرى": "хокуклары",
+    "ياغيندن": "ягыннан",
+    "تيك": "тигез",
+    "بولوب": "булып",
+    "طوهلر": "туалар",
+    "آنلرغه": "аларга",
+    "عقل": "акыл",
+    "وجدان": "вөҗдан",
+    "برلگان": "бирелгән",
+    "برسينه": "берсенә",
+    "قرمته": "карата",
+    "طوغانلرچه": "туганнарча",
+    "مناسبتده": "мөнәсәбәттә",
+    "بولورغه": "булырга",
+    "تيوشلر": "тиешләр"
+};
+
+/* ==========================================================
+   2. FALLBACK TRANSLITERATION RULES (For Unknown Words)
+   ========================================================== */
+const HARD_CONSONANTS = /[قغخطرظصض]/; 
+
+const ARABIC_SINGLE = {
+  'ا':'а', 'آ':'а', 'ب':'б', 'پ':'п', 'ت':'т', 'ج':'җ', 'چ':'ч',
+  'ح':'һ', 'خ':'х', 'د':'д', 'ر':'р', 'ز':'з', 'ژ':'ж',
+  'س':'с', 'ش':'ш', 'ع':'г', 'ف':'ф', 'ق':'к', 'ك':'к',
+  'ل':'л', 'م':'м', 'ن':'н', 'ڭ':'ң', 'ط':'т', 'غ':'г',
+  'ئ':'э', 'ء':'э', 'ة':'һ', 'ې':'е'
+};
+
+function smartTranscribe(text) {
+    // Strip diacritics
+    let clean = text.replace(/[\u0610-\u061A\u064B-\u065F]/g, '');
+    
+    // Split into array of words and punctuation
+    let tokens = clean.match(/[\w\u0600-\u06FF]+|[^\w\u0600-\u06FF\s]+|\s+/g) || [];
+    
+    return tokens.map(token => {
+        // If it's just whitespace or punctuation, return it as is
+        if (!/[\u0600-\u06FF]/.test(token)) return token;
+
+        // 1. DICTIONARY OVERRIDE (Instant Accuracy)
+        if (TATAR_DICTIONARY[token]) {
+            return TATAR_DICTIONARY[token];
+        }
+
+        // 2. HEURISTIC FALLBACK (For words not in dictionary)
+        let isHard = HARD_CONSONANTS.test(token);
+        let cyrillicWord = "";
+        
+        for (let i = 0; i < token.length; i++) {
+            let c = token[i];
+            
+            // Smarter Positional Rules for Cyrillic
+            if (c === 'و') {
+                cyrillicWord += (i === 0) ? 'в' : (isHard ? 'у' : 'ү');
+            } 
+            else if (c === 'ي' || c === 'ی' || c === 'ى') {
+                cyrillicWord += (i === 0) ? 'й' : (isHard ? 'ы' : 'и');
+            } 
+            // In Old Tatar, 'ه' (He) at the END of a word is usually the vowel 'ә' or 'а'
+            else if (c === 'ه') {
+                cyrillicWord += (i === token.length - 1) ? (isHard ? 'а' : 'ә') : 'һ';
+            }
+            else {
+                cyrillicWord += ARABIC_SINGLE[c] || c;
+            }
+        }
+        
+        return cyrillicWord;
+    }).join('');
+}
+
+/* ==========================================================
+   3. UI & OCR IMAGE CLEANUP
+   ========================================================== */
+function switchTab(tab) {
+    document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-' + tab).style.display = 'block';
+    document.getElementById('btn-' + tab).classList.add('active');
+}
+
+async function preprocessImage(imgElement) {
+    const canvas = document.getElementById('procCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = imgElement.naturalWidth * 2;
+    canvas.height = imgElement.naturalHeight * 2;
+    
+    ctx.filter = 'grayscale(1) contrast(2.5) brightness(1.1)';
+    ctx.drawImage(imgElement, 0, 0, canvas.width, canvas.height);
+    
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    for (let i = 0; i < data.length; i += 4) {
+        const avg = (data[i] + data[i+1] + data[i+2]) / 3;
+        const bAndW = avg > 145 ? 255 : 0; 
+        data[i] = data[i+1] = data[i+2] = bAndW;
+    }
+    ctx.putImageData(imageData, 0, 0);
+    return canvas.toDataURL('image/png');
+}
+
+async function processOCR(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const status = document.getElementById('status');
+    const preview = document.getElementById('imagePreview');
+    const reader = new FileReader();
+
+    reader.onload = async (e) => {
+        preview.src = e.target.result;
+        preview.style.display = 'block';
+        document.getElementById('drop-prompt').style.display = 'none';
+        
+        status.innerText = "Cleaning Image & Running OCR...";
+        const cleanedDataUrl = await preprocessImage(preview);
+        
+        try {
+            const { data: { text } } = await Tesseract.recognize(cleanedDataUrl, 'ara', {
+                logger: m => { if(m.status === 'recognizing text') status.innerText = `OCR: ${Math.round(m.progress * 100)}%`; }
+            });
+            document.getElementById('inputText').value = text;
+            status.innerText = "Complete!";
+            runTranscribe();
+        } catch (err) {
+            status.innerText = "Error: " + err.message;
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
+function runTranscribe() {
+    const input = document.getElementById('inputText').value;
+    document.getElementById('outputBox').innerText = smartTranscribe(input);
+}
+</script>
+</body>
+</html>
