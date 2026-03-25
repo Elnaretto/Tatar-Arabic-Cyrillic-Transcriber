@@ -7,7 +7,6 @@
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Cinzel:wght@400;500&display=swap" rel="stylesheet">
 <style>
-/* PRESERVING YOUR THEME */
 :root {
   --navy: #1e2a6e; --navy-deep: #131b4a; --cream: #f5f0e4;
   --cream-alt: #ede5cf; --teal: #2a7f8a; --rose: #c0454a;
@@ -85,9 +84,7 @@ canvas { display: none; }
 
 <script>
 /* ==========================================================
-   1. THE TATAR DICTIONARY (CRITICAL FOR HIGH ACCURACY)
-   Add your most common words here. 
-   Format: "Arabic": "Cyrillic"
+   1. THE TATAR DICTIONARY (I ADDED THIS TO SHOW THE MOST COMMON DIPHTONGS, LETTER COMBINATIONS)
    ========================================================== */
 const TATAR_DICTIONARY = {
     // Conjunctions & Particles
@@ -124,7 +121,7 @@ const TATAR_DICTIONARY = {
 };
 
 /* ==========================================================
-   2. FALLBACK TRANSLITERATION RULES (For Unknown Words)
+   2. FALLBACK TRANSLITERATION RULES
    ========================================================== */
 const HARD_CONSONANTS = /[قغخطرظصض]/; 
 
@@ -152,7 +149,7 @@ function smartTranscribe(text) {
             return TATAR_DICTIONARY[token];
         }
 
-        // 2. HEURISTIC FALLBACK (For words not in dictionary)
+        // 2. HEURISTIC FALLBACK (For words that are not included into dictionary)
         let isHard = HARD_CONSONANTS.test(token);
         let cyrillicWord = "";
         
